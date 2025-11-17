@@ -1,16 +1,26 @@
-import mongoose from "mongoose"
+import mongoose from "mongoose";
 
-const connectDB = async()=>{
+const connectDB = async () => {
+  try {
+    if (!process.env.DB) {
+      throw new Error("MongoDB URI not found in environment variables");
+    }
 
-return await mongoose.connect(process.env.DB).then(()=>{
+    await mongoose.connect(process.env.DB, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
 
-    console.log("database connection ...")
+    console.log("✅ Database connected successfully");
 
-}).catch((error)=>{
-      console.log(`error to connect database : ${error}`)
-
-})
-
-}
+    // optional: log when disconnected
+    mongoose.connection.on("disconnected", () => {
+      console.log("⚠️ Database disconnected");
+    });
+  } catch (error) {
+    console.error("❌ Error connecting to the database:", error.message);
+    process.exit(1); // stop server if DB connection fails
+  }
+};
 
 export default connectDB;
