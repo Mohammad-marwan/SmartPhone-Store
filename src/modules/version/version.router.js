@@ -12,7 +12,7 @@ router.post("/",auth(["admin"]),fileUpload(fileValidation.image).fields([
 
 ]),create);
 
-router.get("/",auth(["admin"]),getAll);
+router.get("/",getAll);
 router.get("/active",getActive);
 router.get("/:id",getDetails);
 router.delete("/:id",auth(["admin"]),remove);
