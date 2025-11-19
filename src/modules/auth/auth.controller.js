@@ -1,48 +1,79 @@
-import bcrypt from "bcryptjs";
-import jwt from'jsonwebtoken';
-import { nanoid ,customAlphabet } from 'nanoid';
-import userModel from "../../../DB/models/user.model.js";
-import { sendEmail } from "../../utils/sendEmail.js";
+import bcrypt from "bcryptjs";             // أو "bcrypt" حسب المكتبة اللي تريدها
+import jwt from "jsonwebtoken";
+import { nanoid, customAlphabet } from "nanoid";
+import userModel from "../../../DB/models/user.model.js"; // أو المسار الصحيح
+import { sendEmail } from "../../utils/sendEmail.js";      // أو المسار الصحيح
 
 export const register = async (req, res) => {
   try {
     const { userName, email, password } = req.body;
 
-    console.log("BODY:", req.body); // 👈 مهم جداً
+    console.log("REGISTER BODY:", req.body); // 👈 تحقق من البيانات
 
-    const user = await userModel.findOne({ email });
-    if (user) {
-      return res.status(409).json({ message: "email already registered" });
+    // التحقق من الحقول المطلوبة
+    if (!userName || !email || !password) {
+      return res.status(400).json({ message: "Missing required fields" });
     }
 
-    const hashedPassword = bcrypt.hashSync(password, parseInt(process.env.salt));
+    // التحقق من أن الإيميل غير مسجل مسبقًا
+    const existingUser = await userModel.findOne({ email });
+    if (existingUser) {
+      return res.status(409).json({ message: "Email already registered" });
+    }
 
-    const creatUser = await userModel.create({
+    // تحقق من قيمة salt قبل التشفير
+    const saltRounds = parseInt(process.env.salt);
+    if (isNaN(saltRounds)) {
+      console.error("Invalid salt value:", process.env.salt);
+      return res.status(500).json({ message: "Server configuration error" });
+    }
+
+    const hashedPassword = bcrypt.hashSync(password, saltRounds);
+
+    // إنشاء المستخدم
+    const newUser = await userModel.create({
       userName,
       email,
       password: hashedPassword,
     });
 
-    const token = jwt.sign({ email }, process.env.confirmEmailToken);
+    // إنشاء رمز تأكيد الإيميل
+    if (!process.env.confirmEmailToken) {
+      console.error("Missing confirmEmailToken env variable");
+      return res.status(500).json({ message: "Server configuration error" });
+    }
 
+    const token = jwt.sign({ email }, process.env.confirmEmailToken, { expiresIn: "1d" });
+
+    // تحضير إيميل التأكيد
     const html = `
       <div>
-        <h2>welcome ${userName}</h2>
+        <h2>Welcome ${userName}</h2>
         <a href="${req.protocol}://${req.headers.host}/auth/confirmEmail/${token}">
-          confirm your Email
+          Confirm your email
         </a>
       </div>
     `;
 
-    await sendEmail(email, "confirm Email", html);
+    try {
+      await sendEmail(email, "Confirm Email", html);
+    } catch (emailError) {
+      console.error("Error sending email:", emailError);
+      // لا تفشل التسجيل فقط بسبب الإيميل، يمكن التعامل لاحقًا
+    }
 
-    return res.status(201).json({ message: "success", creatUser });
+    return res.status(201).json({ message: "Registration successful", user: newUser });
 
   } catch (err) {
-    console.error("REGISTER ERROR:", err);  // 👈 بدنا نشوف هادا
-    return res.status(500).json({ message: "server error", error: err.message });
+    console.error("REGISTER ERROR:", err);
+    return res.status(500).json({
+      message: "Server error",
+      error: err.message,
+      stack: err.stack,
+    });
   }
 };
+
 
 
 export const confirmEmail = async (req,res)=>{
