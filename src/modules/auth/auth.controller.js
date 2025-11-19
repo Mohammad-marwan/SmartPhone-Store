@@ -4,33 +4,45 @@ import { nanoid ,customAlphabet } from 'nanoid';
 import userModel from "../../../DB/models/user.model.js";
 import { sendEmail } from "../../utils/sendEmail.js";
 
-export const register = async (req,res,next)=>{
-const {userName , email , password} = req.body;
+export const register = async (req, res) => {
+  try {
+    const { userName, email, password } = req.body;
 
-const user = await userModel.findOne({email});
-if(user){
+    console.log("BODY:", req.body); // 👈 مهم جداً
 
-    return res.status(404).json({message:"email already rigester"});
+    const user = await userModel.findOne({ email });
+    if (user) {
+      return res.status(409).json({ message: "email already registered" });
+    }
 
-}
-const hashedPassword = bcrypt.hashSync(password,parseInt(process.env.salt));
+    const hashedPassword = bcrypt.hashSync(password, parseInt(process.env.salt));
 
-const creatUser =await userModel.create({userName,email,password:hashedPassword});
+    const creatUser = await userModel.create({
+      userName,
+      email,
+      password: hashedPassword,
+    });
 
-const token =  jwt.sign({email}, process.env.confirmEmailToken);
+    const token = jwt.sign({ email }, process.env.confirmEmailToken);
 
-const html = `
-<div>
-<h2>welcom ${userName}</h2>
-<h2>confirm Email</h2>
-<a href="${req.protocol}://${req.headers.host}/auth/confirmEmail/${token}">confirm your Email</a>
-</div>
-`
-await sendEmail(email,"confirm Email",html)
+    const html = `
+      <div>
+        <h2>welcome ${userName}</h2>
+        <a href="${req.protocol}://${req.headers.host}/auth/confirmEmail/${token}">
+          confirm your Email
+        </a>
+      </div>
+    `;
 
-return res.status(201).json({message:"success",creatUser})
+    await sendEmail(email, "confirm Email", html);
 
-}
+    return res.status(201).json({ message: "success", creatUser });
+
+  } catch (err) {
+    console.error("REGISTER ERROR:", err);  // 👈 بدنا نشوف هادا
+    return res.status(500).json({ message: "server error", error: err.message });
+  }
+};
 
 
 export const confirmEmail = async (req,res)=>{
